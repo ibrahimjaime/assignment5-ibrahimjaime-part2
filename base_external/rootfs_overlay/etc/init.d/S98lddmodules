@@ -1,0 +1,67 @@
+#!/bin/sh
+# S98lddmodules - Load/unload ldd3 example kernel modules (scull, faulty, hello)
+
+MODULE_DIR="/lib/modules/$(uname -r)/extra"
+GROUP="staff"
+if ! grep -q '^staff:' /etc/group; then
+    GROUP="wheel"
+fi
+
+do_start()
+{
+    cd "$MODULE_DIR" || { echo "S98lddmodules: module dir not found"; exit 1; }
+
+    echo "Loading scull module"
+    insmod ./scull.ko || exit 1
+    major=$(awk '$2=="scull" {print $1}' /proc/devices)
+    rm -f /dev/scull0 /dev/scull1 /dev/scull2 /dev/scull3 /dev/scull
+    mknod /dev/scull0 c $major 0
+    mknod /dev/scull1 c $major 1
+    mknod /dev/scull2 c $major 2
+    mknod /dev/scull3 c $major 3
+    ln -sf scull0 /dev/scull
+    chgrp $GROUP /dev/scull0 /dev/scull1 /dev/scull2 /dev/scull3
+    chmod 664 /dev/scull0 /dev/scull1 /dev/scull2 /dev/scull3
+
+    echo "Loading faulty module"
+    insmod ./faulty.ko || exit 1
+    major=$(awk '$2=="faulty" {print $1}' /proc/devices)
+    rm -f /dev/faulty
+    mknod /dev/faulty c $major 0
+    chgrp $GROUP /dev/faulty
+    chmod 664 /dev/faulty
+
+    echo "Loading hello module"
+    modprobe hello || exit 1
+}
+
+do_stop()
+{
+    cd "$MODULE_DIR" || exit 1
+
+    echo "Unloading hello module"
+    rmmod hello
+
+    echo "Unloading faulty module"
+    rmmod faulty
+    rm -f /dev/faulty
+
+    echo "Unloading scull module"
+    rmmod scull
+    rm -f /dev/scull0 /dev/scull1 /dev/scull2 /dev/scull3 /dev/scull
+}
+
+case "$1" in
+    start)
+        do_start
+        ;;
+    stop)
+        do_stop
+        ;;
+    *)
+        echo "Usage: $0 {start|stop}"
+        exit 1
+        ;;
+esac
+
+exit 0
